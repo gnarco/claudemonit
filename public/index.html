@@ -488,18 +488,18 @@
       chart5h.update("none");
       chart7d.data.datasets[0].data = data7d;
 
-      // Ideal pace line: linear from 0% at week start to 100% at reset
-      const resetIso = latest.seven_day_resets_at;
-      let pace = [];
-      if (resetIso) {
-        const resetTs = new Date(resetIso).getTime();
-        const startTs = resetTs - 7 * 24 * 60 * 60 * 1000;
-        pace = rows.map(r => {
+      // Ideal pace line: linear from 0% to 100% within each rolling 7-day window.
+      // Computed per snapshot so it naturally drops back at each reset.
+      const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+      const pace = rows
+        .filter(r => r.seven_day_resets_at)
+        .map(r => {
           const t = new Date(r.timestamp + "Z").getTime();
-          const pct = Math.max(0, Math.min(100, ((t - startTs) / (resetTs - startTs)) * 100));
+          const resetTs = new Date(r.seven_day_resets_at).getTime();
+          const startTs = resetTs - WEEK_MS;
+          const pct = Math.max(0, Math.min(100, ((t - startTs) / WEEK_MS) * 100));
           return { x: new Date(r.timestamp + "Z"), y: pct };
         });
-      }
       chart7d.data.datasets[1].data = pace;
       chart7d.update("none");
 
