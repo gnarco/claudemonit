@@ -281,16 +281,27 @@
       return new Chart(ctx, {
         type: "line",
         data: {
-          datasets: [{
-            label,
-            data: [],
-            borderColor: color,
-            backgroundColor: color + "22",
-            fill: true,
-            tension: 0.3,
-            pointRadius: 1.5,
-            borderWidth: 2,
-          }],
+          datasets: [
+            {
+              label,
+              data: [],
+              borderColor: color,
+              backgroundColor: color + "22",
+              fill: true,
+              tension: 0.3,
+              pointRadius: 1.5,
+              borderWidth: 2,
+            },
+            {
+              label: "Ideal pace",
+              data: [],
+              borderColor: "#4ade8088",
+              borderDash: [6, 4],
+              pointRadius: 0,
+              borderWidth: 1.5,
+              fill: false,
+            },
+          ],
         },
         options: {
           responsive: true,
@@ -311,7 +322,7 @@
             },
           },
           plugins: {
-            legend: { display: false },
+            legend: { labels: { color: "#888", boxWidth: 10, font: { size: 11 } } },
             tooltip: {
               callbacks: {
                 label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`,
@@ -380,66 +391,9 @@
       });
     }
 
-    function make7dChart(canvasId) {
-      const ctx = document.getElementById(canvasId).getContext("2d");
-      return new Chart(ctx, {
-        type: "line",
-        data: {
-          datasets: [
-            {
-              label: "7d usage",
-              data: [],
-              borderColor: "#6366f1",
-              backgroundColor: "#6366f122",
-              fill: true,
-              tension: 0.3,
-              pointRadius: 1.5,
-              borderWidth: 2,
-            },
-            {
-              label: "Ideal pace",
-              data: [],
-              borderColor: "#4ade8088",
-              borderDash: [6, 4],
-              pointRadius: 0,
-              borderWidth: 1.5,
-              fill: false,
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { intersect: false, mode: "index" },
-          scales: {
-            x: {
-              type: "time",
-              time: { tooltipFormat: "dd/MM HH:mm" },
-              grid: { color: "#1e1e2e" },
-              ticks: { color: "#666", maxTicksLimit: 8 },
-            },
-            y: {
-              min: 0,
-              max: 100,
-              grid: { color: "#1e1e2e" },
-              ticks: { color: "#666", callback: v => v + "%" },
-            },
-          },
-          plugins: {
-            legend: { labels: { color: "#888", boxWidth: 10, font: { size: 11 } } },
-            tooltip: {
-              callbacks: {
-                label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`,
-              },
-            },
-          },
-        },
-      });
-    }
-
     // Init
     chart5h = makeChart("chart5h", "5h usage", "#d97706");
-    chart7d = make7dChart("chart7d");
+    chart7d = makeChart("chart7d", "7d usage", "#6366f1");
     let chartCredits = makeCreditsChart("chartCredits");
 
     async function refresh() {
@@ -485,23 +439,25 @@
       const data5h = rows.map(r => ({ x: new Date(r.timestamp + "Z"), y: r.five_hour_pct }));
       const data7d = rows.map(r => ({ x: new Date(r.timestamp + "Z"), y: r.seven_day_pct }));
 
-      chart5h.data.datasets[0].data = data5h;
-      chart5h.update("none");
-      chart7d.data.datasets[0].data = data7d;
-
-      // Ideal pace line: linear from 0% to 100% within each rolling 7-day window.
+      // Ideal pace line per chart: linear from 0% to 100% within each rolling window.
       // Computed per snapshot so it naturally drops back at each reset.
-      const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-      const pace = rows
-        .filter(r => r.seven_day_resets_at)
-        .map(r => {
-          const t = new Date(r.timestamp + "Z").getTime();
-          const resetTs = new Date(r.seven_day_resets_at).getTime();
-          const startTs = resetTs - WEEK_MS;
-          const pct = Math.max(0, Math.min(100, ((t - startTs) / WEEK_MS) * 100));
-          return { x: new Date(r.timestamp + "Z"), y: pct };
-        });
-      chart7d.data.datasets[1].data = pace;
+      const computePace = (resetField, windowMs) =>
+        rows
+          .filter(r => r[resetField])
+          .map(r => {
+            const t = new Date(r.timestamp + "Z").getTime();
+            const resetTs = new Date(r[resetField]).getTime();
+            const startTs = resetTs - windowMs;
+            const pct = Math.max(0, Math.min(100, ((t - startTs) / windowMs) * 100));
+            return { x: new Date(r.timestamp + "Z"), y: pct };
+          });
+
+      chart5h.data.datasets[0].data = data5h;
+      chart5h.data.datasets[1].data = computePace("five_hour_resets_at", 5 * 60 * 60 * 1000);
+      chart5h.update("none");
+
+      chart7d.data.datasets[0].data = data7d;
+      chart7d.data.datasets[1].data = computePace("seven_day_resets_at", 7 * 24 * 60 * 60 * 1000);
       chart7d.update("none");
 
       // Credits chart
