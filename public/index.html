@@ -379,9 +379,66 @@
       });
     }
 
+    function make7dChart(canvasId) {
+      const ctx = document.getElementById(canvasId).getContext("2d");
+      return new Chart(ctx, {
+        type: "line",
+        data: {
+          datasets: [
+            {
+              label: "7d usage",
+              data: [],
+              borderColor: "#6366f1",
+              backgroundColor: "#6366f122",
+              fill: true,
+              tension: 0.3,
+              pointRadius: 1.5,
+              borderWidth: 2,
+            },
+            {
+              label: "Ideal pace",
+              data: [],
+              borderColor: "#4ade8088",
+              borderDash: [6, 4],
+              pointRadius: 0,
+              borderWidth: 1.5,
+              fill: false,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { intersect: false, mode: "index" },
+          scales: {
+            x: {
+              type: "time",
+              time: { tooltipFormat: "dd/MM HH:mm" },
+              grid: { color: "#1e1e2e" },
+              ticks: { color: "#666", maxTicksLimit: 8 },
+            },
+            y: {
+              min: 0,
+              max: 100,
+              grid: { color: "#1e1e2e" },
+              ticks: { color: "#666", callback: v => v + "%" },
+            },
+          },
+          plugins: {
+            legend: { labels: { color: "#888", boxWidth: 10, font: { size: 11 } } },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`,
+              },
+            },
+          },
+        },
+      });
+    }
+
     // Init
     chart5h = makeChart("chart5h", "5h usage", "#d97706");
-    chart7d = makeChart("chart7d", "7d usage", "#6366f1");
+    chart7d = make7dChart("chart7d");
     let chartCredits = makeCreditsChart("chartCredits");
 
     async function refresh() {
@@ -430,6 +487,20 @@
       chart5h.data.datasets[0].data = data5h;
       chart5h.update("none");
       chart7d.data.datasets[0].data = data7d;
+
+      // Ideal pace line: linear from 0% at week start to 100% at reset
+      const resetIso = latest.seven_day_resets_at;
+      let pace = [];
+      if (resetIso) {
+        const resetTs = new Date(resetIso).getTime();
+        const startTs = resetTs - 7 * 24 * 60 * 60 * 1000;
+        pace = rows.map(r => {
+          const t = new Date(r.timestamp + "Z").getTime();
+          const pct = Math.max(0, Math.min(100, ((t - startTs) / (resetTs - startTs)) * 100));
+          return { x: new Date(r.timestamp + "Z"), y: pct };
+        });
+      }
+      chart7d.data.datasets[1].data = pace;
       chart7d.update("none");
 
       // Credits chart
